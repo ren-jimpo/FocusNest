@@ -44,6 +44,7 @@ class Task {
   final List<String> tags;
   final TaskRepeat repeat;
   final String? relatedThemeId;
+  final String? categoryId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -57,6 +58,7 @@ class Task {
     List<String>? tags,
     this.repeat = TaskRepeat.none,
     this.relatedThemeId,
+    this.categoryId,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
@@ -73,6 +75,7 @@ class Task {
     List<String>? tags,
     TaskRepeat? repeat,
     String? relatedThemeId,
+    String? categoryId,
   }) {
     return Task(
       id: id,
@@ -84,6 +87,7 @@ class Task {
       tags: tags ?? this.tags,
       repeat: repeat ?? this.repeat,
       relatedThemeId: relatedThemeId ?? this.relatedThemeId,
+      categoryId: categoryId ?? this.categoryId,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );
@@ -118,5 +122,14 @@ class Task {
     if (dueDate == null) return false;
     final now = DateTime.now();
     return dueDate!.year == now.year && dueDate!.month == now.month;
+  }
+
+  // 期限が過ぎているかチェック
+  bool isOverdue() {
+    if (dueDate == null) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final taskDate = DateTime(dueDate!.year, dueDate!.month, dueDate!.day);
+    return taskDate.isBefore(today);
   }
 } 

@@ -1,8 +1,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 import '../models/task.dart';
+
 import '../services/task_service.dart';
+import '../services/category_service.dart';
 import 'task_edit_screen.dart';
+import 'category_management_screen.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -13,13 +16,16 @@ class TasksScreen extends StatefulWidget {
 
 class _TasksScreenState extends State<TasksScreen> {
   final TaskService _taskService = TaskService();
+  final CategoryService _categoryService = CategoryService();
   final TextEditingController _searchController = TextEditingController();
   
   List<Task> _filteredTasks = [];
+  final Map<String, List<Task>> _groupedTasks = {};
   String _searchQuery = '';
   TaskStatus? _statusFilter;
   TaskPriority? _priorityFilter;
   String? _dueDateFilter; // 'today', 'week', 'month'
+  String? _categoryFilter;
 
   @override
   void initState() {
@@ -82,6 +88,15 @@ class _TasksScreenState extends State<TasksScreen> {
       }
     }
 
+    // カテゴリーフィルタを適用
+    if (_categoryFilter != null) {
+      if (_categoryFilter == 'uncategorized') {
+        tasks = tasks.where((task) => task.categoryId == null).toList();
+      } else {
+        tasks = tasks.where((task) => task.categoryId == _categoryFilter).toList();
+      }
+    }
+
     // 期限が近い順にソート（期限なしは最後）
     tasks.sort((a, b) {
       if (a.dueDate == null && b.dueDate == null) return 0;
@@ -91,6 +106,28 @@ class _TasksScreenState extends State<TasksScreen> {
     });
 
     _filteredTasks = tasks;
+    _groupTasksByCategory();
+  }
+
+  void _groupTasksByCategory() {
+    _groupedTasks.clear();
+    
+    // まず利用可能なすべてのカテゴリーを取得
+    final categories = _categoryService.getAllCategories();
+    
+    // カテゴリーごとにタスクをグループ化
+    for (final category in categories) {
+      final categoryTasks = _filteredTasks.where((task) => task.categoryId == category.id).toList();
+      if (categoryTasks.isNotEmpty) {
+        _groupedTasks[category.id] = categoryTasks;
+      }
+    }
+    
+    // 未分類のタスクも追加
+    final uncategorizedTasks = _filteredTasks.where((task) => task.categoryId == null).toList();
+    if (uncategorizedTasks.isNotEmpty) {
+      _groupedTasks['uncategorized'] = uncategorizedTasks;
+    }
   }
 
   void _showFilterOptions() {
@@ -119,6 +156,13 @@ class _TasksScreenState extends State<TasksScreen> {
               _showDueDateFilter();
             },
             child: const Text('期限でフィルタ'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(context);
+              _showCategoryFilter();
+            },
+            child: const Text('カテゴリーでフィルタ'),
           ),
           CupertinoActionSheetAction(
             onPressed: () {
@@ -235,58 +279,92 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
+  void _showCategoryFilter() {
+    final categories = _categoryService.getAllCategories();
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (BuildContext context) => CupertinoActionSheet(
+        title: const Text('カテゴリーを選択'),
+        actions: <CupertinoActionSheetAction>[
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {
+                _categoryFilter = 'uncategorized';
+                _applyFilters();
+              });
+            },
+            child: const Text('未分類'),
+          ),
+          ...categories.map((category) =>
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _categoryFilter = category.id;
+                  _applyFilters();
+                });
+              },
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: category.color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(category.name),
+                ],
+              ),
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('キャンセル'),
+        ),
+      ),
+    );
+  }
+
   void _clearAllFilters() {
     setState(() {
       _statusFilter = null;
       _priorityFilter = null;
       _dueDateFilter = null;
+      _categoryFilter = null;
       _searchController.clear();
       _searchQuery = '';
       _applyFilters();
     });
   }
 
-  void _navigateToTaskEdit({Task? task}) async {
-    final result = await Navigator.of(context).push<Task>(
-      CupertinoPageRoute(
-        builder: (context) => TaskEditScreen(task: task),
-      ),
-    );
-
-    if (result != null) {
-      if (task == null) {
-        _taskService.addTask(result);
-      } else {
-        _taskService.updateTask(result);
-      }
-      _loadTasks();
-    }
-  }
-
-  void _deleteTask(Task task) {
-    showCupertinoDialog<void>(
+  void _navigateToTaskEdit({Task? task}) {
+    showCupertinoModalPopup<Task>(
       context: context,
-      builder: (BuildContext context) => CupertinoAlertDialog(
-        title: const Text('タスクを削除'),
-        content: Text('「${task.title}」を削除しますか？'),
-        actions: <CupertinoDialogAction>[
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('キャンセル'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.pop(context);
-              _taskService.deleteTask(task.id);
-              _loadTasks();
-            },
-            child: const Text('削除'),
-          ),
-        ],
+      builder: (context) => SizedBox(
+        height: MediaQuery.of(context).size.height * 0.9,
+        child: CupertinoPageScaffold(
+          child: TaskEditScreen(task: task),
+        ),
       ),
-    );
+    ).then((result) {
+      if (result != null) {
+        if (task == null) {
+          _taskService.addTask(result);
+        } else {
+          _taskService.updateTask(result);
+        }
+        _loadTasks();
+      }
+    });
   }
+
+
 
   Color _getPriorityColor(TaskPriority priority) {
     switch (priority) {
@@ -299,16 +377,7 @@ class _TasksScreenState extends State<TasksScreen> {
     }
   }
 
-  Color _getStatusColor(TaskStatus status) {
-    switch (status) {
-      case TaskStatus.notStarted:
-        return CupertinoColors.systemGrey;
-      case TaskStatus.inProgress:
-        return CupertinoColors.systemBlue;
-      case TaskStatus.done:
-        return CupertinoColors.systemGreen;
-    }
-  }
+
 
   Widget _buildFilterChips() {
     final List<Widget> chips = [];
@@ -355,6 +424,26 @@ class _TasksScreenState extends State<TasksScreen> {
       ));
     }
 
+    if (_categoryFilter != null) {
+      String categoryName = '';
+      if (_categoryFilter == 'uncategorized') {
+        categoryName = '未分類';
+      } else {
+        final category = _categoryService.getCategoryById(_categoryFilter!);
+        categoryName = category?.name ?? 'カテゴリー';
+      }
+      chips.add(_buildFilterChip(
+        'カテゴリー: $categoryName',
+        () => setState(() {
+          _categoryFilter = null;
+          _applyFilters();
+        }),
+        showColor: _categoryFilter != 'uncategorized' 
+            ? _categoryService.getCategoryById(_categoryFilter!)?.color 
+            : null,
+      ));
+    }
+
     if (chips.isEmpty) return const SizedBox.shrink();
 
     return Container(
@@ -367,7 +456,7 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  Widget _buildFilterChip(String label, VoidCallback onRemove) {
+  Widget _buildFilterChip(String label, VoidCallback onRemove, {Color? showColor}) {
     return Container(
       margin: const EdgeInsets.only(right: 8),
       child: CupertinoButton(
@@ -378,6 +467,17 @@ class _TasksScreenState extends State<TasksScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (showColor != null) ...[
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: showColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
             Text(
               label,
               style: const TextStyle(
@@ -402,6 +502,17 @@ class _TasksScreenState extends State<TasksScreen> {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         middle: const Text('タスク'),
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: () {
+            Navigator.of(context).push(
+              CupertinoPageRoute(
+                builder: (context) => const CategoryManagementScreen(),
+              ),
+            );
+          },
+          child: const Icon(CupertinoIcons.folder),
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -435,7 +546,7 @@ class _TasksScreenState extends State<TasksScreen> {
             
             // タスク一覧
             Expanded(
-              child: _filteredTasks.isEmpty
+              child: _groupedTasks.isEmpty
                   ? const Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -457,10 +568,12 @@ class _TasksScreenState extends State<TasksScreen> {
                       ),
                     )
                   : ListView.builder(
-                      itemCount: _filteredTasks.length,
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      itemCount: _groupedTasks.keys.length,
                       itemBuilder: (context, index) {
-                        final task = _filteredTasks[index];
-                        return _buildTaskTile(task);
+                        final categoryId = _groupedTasks.keys.elementAt(index);
+                        final tasks = _groupedTasks[categoryId]!;
+                        return _buildCategorySection(categoryId, tasks);
                       },
                     ),
             ),
@@ -470,144 +583,204 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  Widget _buildTaskTile(Task task) {
+
+
+
+
+  Widget _buildCategorySection(String categoryId, List<Task> tasks) {
+    String categoryName;
+    Color? categoryColor;
+    
+    if (categoryId == 'uncategorized') {
+      categoryName = '未分類';
+      categoryColor = null;
+    } else {
+      final category = _categoryService.getCategoryById(categoryId);
+      categoryName = category?.name ?? 'カテゴリー';
+      categoryColor = category?.color;
+    }
+    
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      margin: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // カテゴリーヘッダー
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
+            child: Row(
+              children: [
+                if (categoryColor != null) ...[
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: categoryColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  categoryName,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: CupertinoColors.label,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemGrey5,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${tasks.length}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.systemGrey,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // タスクグリッド (一行に3個)
+          _buildTaskGrid(tasks),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTaskGrid(List<Task> tasks) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 4.5, // 高さを半分にしたので比率を調整
+          ),
+          itemCount: tasks.length,
+          itemBuilder: (context, index) {
+            final task = tasks[index];
+            return _buildCompactTaskCard(task);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildCompactTaskCard(Task task) {
+    return Container(
+      height: 40, // 高さを半分に（80px → 40px）
       decoration: BoxDecoration(
         color: CupertinoColors.systemBackground,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8), // 角丸も小さく
         border: Border.all(
           color: CupertinoColors.systemGrey5,
           width: 1,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: CupertinoColors.systemGrey6.withValues(alpha: 0.3),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: CupertinoButton(
         padding: EdgeInsets.zero,
         onPressed: () => _navigateToTaskEdit(task: task),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // よりコンパクトに
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 優先度インジケーター
+              // 優先度アイコン
               Container(
-                width: 4,
-                height: 40,
+                width: 8,
+                height: 8,
                 decoration: BoxDecoration(
                   color: _getPriorityColor(task.priority),
-                  borderRadius: BorderRadius.circular(2),
+                  shape: BoxShape.circle,
                 ),
               ),
-              const SizedBox(width: 12),
               
-              // メインコンテンツ
+              const SizedBox(width: 6),
+              
+              // タスクタイトル
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       task.title,
                       style: TextStyle(
+                        fontSize: 16, // 学習テーマに合わせて大幅拡大
                         fontWeight: FontWeight.w600,
-                        decoration: task.status == TaskStatus.done
-                            ? TextDecoration.lineThrough
-                            : null,
                         color: task.status == TaskStatus.done
                             ? CupertinoColors.systemGrey
                             : CupertinoColors.label,
+                        decoration: task.status == TaskStatus.done
+                            ? TextDecoration.lineThrough
+                            : null,
+                        height: 1.1,
                       ),
+                      maxLines: 1, // 1行に制限
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    if (task.description.isNotEmpty) ...[
-                      const SizedBox(height: 4),
+                    if (task.dueDate != null) ...[
+                      const SizedBox(height: 1),
                       Text(
-                        task.description,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: CupertinoColors.systemGrey,
+                        DateFormat('M/d').format(task.dueDate!),
+                        style: TextStyle(
+                          fontSize: 13, // 学習テーマの説明サイズに合わせて拡大
+                          fontWeight: FontWeight.w500,
+                          color: task.isOverdue()
+                              ? CupertinoColors.systemRed
+                              : CupertinoColors.systemGrey,
                         ),
-                      ),
-                    ],
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _getStatusColor(task.status).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            task.status.displayName,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: _getStatusColor(task.status),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        if (task.dueDate != null) ...[
-                          const SizedBox(width: 8),
-                          Icon(
-                            CupertinoIcons.calendar,
-                            size: 12,
-                            color: task.hasDueToday()
-                                ? CupertinoColors.systemRed
-                                : CupertinoColors.systemGrey,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            DateFormat('M/d').format(task.dueDate!),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: task.hasDueToday()
-                                  ? CupertinoColors.systemRed
-                                  : CupertinoColors.systemGrey,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (task.tags.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 4,
-                        children: task.tags.take(3).map((tag) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              color: CupertinoColors.systemGrey6,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              tag,
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: CupertinoColors.systemGrey,
-                              ),
-                            ),
-                          );
-                        }).toList(),
                       ),
                     ],
                   ],
                 ),
               ),
               
-              // アクションボタン
-              CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: () => _showTaskActions(task),
-                child: const Icon(
-                  CupertinoIcons.ellipsis,
-                  color: CupertinoColors.systemGrey,
+              const SizedBox(width: 4),
+              
+              // 完了ボタン
+              GestureDetector(
+                onTap: () => _toggleTaskStatus(task),
+                child: Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: task.status == TaskStatus.done
+                        ? CupertinoColors.systemGreen
+                        : CupertinoColors.systemGrey6,
+                    shape: BoxShape.circle,
+                    border: task.status != TaskStatus.done
+                        ? Border.all(
+                            color: CupertinoColors.systemGrey3,
+                            width: 0.5,
+                          )
+                        : null,
+                  ),
+                  child: task.status == TaskStatus.done
+                      ? const Icon(
+                          CupertinoIcons.checkmark,
+                          size: 8,
+                          color: CupertinoColors.white,
+                        )
+                      : null,
                 ),
               ),
             ],
@@ -617,47 +790,13 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  void _showTaskActions(Task task) {
-    showCupertinoModalPopup<void>(
-      context: context,
-      builder: (BuildContext context) => CupertinoActionSheet(
-        actions: <CupertinoActionSheetAction>[
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(context);
-              _navigateToTaskEdit(task: task);
-            },
-            child: const Text('編集'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(context);
-              final updatedTask = task.copyWith(
-                status: task.status == TaskStatus.done
-                    ? TaskStatus.notStarted
-                    : TaskStatus.done,
-              );
-              _taskService.updateTask(updatedTask);
-              _loadTasks();
-            },
-            child: Text(
-              task.status == TaskStatus.done ? '未完了にする' : '完了にする',
-            ),
-          ),
-          CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.pop(context);
-              _deleteTask(task);
-            },
-            child: const Text('削除'),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('キャンセル'),
-        ),
-      ),
-    );
+  void _toggleTaskStatus(Task task) {
+    final newStatus = task.status == TaskStatus.done
+        ? TaskStatus.notStarted
+        : TaskStatus.done;
+    
+    final updatedTask = task.copyWith(status: newStatus);
+    _taskService.updateTask(updatedTask);
+    _applyFilters();
   }
 } 

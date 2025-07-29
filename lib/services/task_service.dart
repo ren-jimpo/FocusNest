@@ -15,6 +15,7 @@ class TaskService {
       status: TaskStatus.inProgress,
       tags: ['Flutter', '開発', '学習'],
       relatedThemeId: 'theme_flutter',
+      categoryId: 'default_study',
     ),
     Task(
       title: 'データベース設計の復習',
@@ -24,6 +25,7 @@ class TaskService {
       status: TaskStatus.notStarted,
       tags: ['データベース', 'PostgreSQL', 'Supabase'],
       relatedThemeId: 'theme_backend',
+      categoryId: 'default_study',
     ),
     Task(
       title: 'UIデザインガイドラインの確認',
@@ -32,6 +34,7 @@ class TaskService {
       priority: TaskPriority.high,
       status: TaskStatus.notStarted,
       tags: ['UI/UX', 'デザイン', 'Apple'],
+      categoryId: 'default_work',
     ),
     Task(
       title: 'プロジェクト進捗報告書作成',
@@ -40,6 +43,7 @@ class TaskService {
       priority: TaskPriority.medium,
       status: TaskStatus.notStarted,
       tags: ['報告書', 'ドキュメント'],
+      categoryId: 'default_work',
     ),
     Task(
       title: 'コードレビューの実施',
@@ -48,6 +52,7 @@ class TaskService {
       priority: TaskPriority.low,
       status: TaskStatus.done,
       tags: ['コードレビュー', 'チーム'],
+      categoryId: 'default_work',
     ),
     Task(
       title: 'アプリのテスト計画策定',
@@ -57,6 +62,7 @@ class TaskService {
       status: TaskStatus.notStarted,
       tags: ['テスト', '品質保証'],
       relatedThemeId: 'theme_testing',
+      categoryId: 'default_study',
     ),
   ];
 
@@ -123,6 +129,11 @@ class TaskService {
   // 学習テーマに関連するタスクを取得
   List<Task> getTasksByThemeId(String themeId) {
     return _tasks.where((task) => task.relatedThemeId == themeId).toList();
+  }
+
+  // カテゴリーに関連するタスクを取得
+  List<Task> getTasksByCategoryId(String categoryId) {
+    return _tasks.where((task) => task.categoryId == categoryId).toList();
   }
 
   // すべてのタグを取得

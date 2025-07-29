@@ -1,8 +1,12 @@
 import 'package:flutter/cupertino.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'screens/tasks_screen.dart';
 import 'screens/study_themes_screen.dart';
+import 'screens/calendar_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('ja_JP', null);
   runApp(const FocusNestApp());
 }
 
@@ -41,12 +45,17 @@ class _MainTabViewState extends State<MainTabView> {
             color: CupertinoColors.systemGrey5,
             width: 0.5,
           ),
-        ),
+      ),
         items: const [
           BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.checkmark_square),
             activeIcon: Icon(CupertinoIcons.checkmark_square_fill),
             label: 'タスク',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.calendar),
+            activeIcon: Icon(CupertinoIcons.calendar_today),
+            label: 'カレンダー',
           ),
           BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.book),
@@ -60,6 +69,8 @@ class _MainTabViewState extends State<MainTabView> {
           case 0:
             return const TasksScreen();
           case 1:
+            return const CalendarScreen();
+          case 2:
             return const StudyThemesScreen();
           default:
             return const TasksScreen();

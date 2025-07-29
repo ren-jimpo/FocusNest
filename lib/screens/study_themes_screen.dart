@@ -136,21 +136,25 @@ class _StudyThemesScreenState extends State<StudyThemesScreen> {
     });
   }
 
-  void _navigateToThemeEdit({StudyTheme? theme}) async {
-    final result = await Navigator.of(context).push<StudyTheme>(
-      CupertinoPageRoute(
-        builder: (context) => StudyThemeEditScreen(theme: theme),
+  void _navigateToThemeEdit({StudyTheme? theme}) {
+    showCupertinoModalPopup<StudyTheme>(
+      context: context,
+      builder: (context) => SizedBox(
+        height: MediaQuery.of(context).size.height * 0.9,
+        child: CupertinoPageScaffold(
+          child: StudyThemeEditScreen(theme: theme),
+        ),
       ),
-    );
-
-    if (result != null) {
-      if (theme == null) {
-        _themeService.addTheme(result);
-      } else {
-        _themeService.updateTheme(result);
+    ).then((result) {
+      if (result != null) {
+        if (theme == null) {
+          _themeService.addTheme(result);
+        } else {
+          _themeService.updateTheme(result);
+        }
+        _loadThemes();
       }
-      _loadThemes();
-    }
+    });
   }
 
   void _navigateToThemeDetail(StudyTheme theme) async {

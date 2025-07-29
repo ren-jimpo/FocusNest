@@ -2,7 +2,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 import '../models/task.dart';
 import '../models/study_theme.dart';
+import '../models/category.dart';
 import '../services/study_theme_service.dart';
+import '../services/category_service.dart';
+import '../widgets/card_text_field.dart';
 
 class TaskEditScreen extends StatefulWidget {
   final Task? task;
@@ -15,6 +18,7 @@ class TaskEditScreen extends StatefulWidget {
 
 class _TaskEditScreenState extends State<TaskEditScreen> {
   final StudyThemeService _themeService = StudyThemeService();
+  final CategoryService _categoryService = CategoryService();
   
   late final TextEditingController _titleController;
   late final TextEditingController _descriptionController;
@@ -25,13 +29,16 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
   late TaskRepeat _repeat;
   DateTime? _dueDate;
   String? _relatedThemeId;
+  String? _categoryId;
   List<String> _tags = [];
   List<StudyTheme> _availableThemes = [];
+  List<Category> _availableCategories = [];
 
   @override
   void initState() {
     super.initState();
     _availableThemes = _themeService.getAllThemes();
+    _availableCategories = _categoryService.getAllCategories();
     
     if (widget.task != null) {
       _titleController = TextEditingController(text: widget.task!.title);
@@ -41,6 +48,7 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
       _repeat = widget.task!.repeat;
       _dueDate = widget.task!.dueDate;
       _relatedThemeId = widget.task!.relatedThemeId;
+      _categoryId = widget.task!.categoryId;
       _tags = List.from(widget.task!.tags);
     } else {
       _titleController = TextEditingController();
@@ -77,6 +85,7 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
       tags: _tags,
       repeat: _repeat,
       relatedThemeId: _relatedThemeId,
+      categoryId: _categoryId,
       createdAt: widget.task?.createdAt,
     );
 
@@ -264,6 +273,55 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
     );
   }
 
+  void _showCategoryPicker() {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (BuildContext context) => CupertinoActionSheet(
+        title: const Text('カテゴリーを選択'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {
+                _categoryId = null;
+              });
+            },
+            child: const Text('未分類'),
+          ),
+          ..._availableCategories.map((category) =>
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _categoryId = category.id;
+                });
+              },
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: category.color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(category.name),
+                ],
+              ),
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('キャンセル'),
+        ),
+      ),
+    );
+  }
+
   void _addTag() {
     final tag = _tagController.text.trim();
     if (tag.isNotEmpty && !_tags.contains(tag)) {
@@ -294,6 +352,7 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
       navigationBar: CupertinoNavigationBar(
         middle: Text(widget.task != null ? 'タスクを編集' : '新しいタスク'),
         leading: CupertinoButton(
@@ -311,305 +370,255 @@ class _TaskEditScreenState extends State<TaskEditScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // タイトル
-            _buildSection(
-              'タイトル',
-              CupertinoTextFormFieldRow(
-                controller: _titleController,
-                placeholder: 'タスクのタイトルを入力',
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-              ),
-            ),
-            
-            const SizedBox(height: 20),
-            
-            // 説明
-            _buildSection(
-              '説明',
-              CupertinoTextFormFieldRow(
-                controller: _descriptionController,
-                placeholder: 'タスクの詳細説明（任意）',
-                maxLines: 3,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-              ),
-            ),
-            
-            const SizedBox(height: 20),
-            
-            // 期限
-            _buildSection(
-              '期限',
-              GestureDetector(
-                onTap: _showDatePicker,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.systemGrey6,
-                    borderRadius: BorderRadius.circular(8),
+            // 基本情報
+            CardSection(
+              children: [
+                const Text(
+                  '基本情報',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.label,
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                ),
+                const SizedBox(height: 16),
+                CardTextField(
+                  label: 'タイトル',
+                  placeholder: 'タスクのタイトルを入力',
+                  controller: _titleController,
+                ),
+                const SizedBox(height: 16),
+                CardTextField(
+                  label: '説明',
+                  placeholder: 'タスクの詳細説明（任意）',
+                  controller: _descriptionController,
+                  maxLines: 3,
+                ),
+              ],
+            ),
+            
+            // 期限と設定
+            CardSection(
+              children: [
+                const Text(
+                  '期限と設定',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.label,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                CardSelectField(
+                  label: '期限',
+                  value: _dueDate != null
+                      ? DateFormat('yyyy年M月d日 HH:mm').format(_dueDate!)
+                      : '期限を設定',
+                  onTap: _showDatePicker,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        _dueDate != null
-                            ? DateFormat('yyyy年M月d日 HH:mm').format(_dueDate!)
-                            : '期限を設定',
-                        style: TextStyle(
-                          color: _dueDate != null
-                              ? CupertinoColors.label
-                              : CupertinoColors.placeholderText,
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          if (_dueDate != null)
-                            CupertinoButton(
-                              padding: EdgeInsets.zero,
-                              onPressed: () {
-                                setState(() {
-                                  _dueDate = null;
-                                });
-                              },
-                              child: const Icon(
-                                CupertinoIcons.xmark_circle_fill,
-                                color: CupertinoColors.systemGrey,
-                                size: 20,
-                              ),
-                            ),
-                          const Icon(
-                            CupertinoIcons.calendar,
+                      if (_dueDate != null)
+                        CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: () {
+                            setState(() {
+                              _dueDate = null;
+                            });
+                          },
+                          child: const Icon(
+                            CupertinoIcons.xmark_circle_fill,
                             color: CupertinoColors.systemGrey,
+                            size: 20,
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 20),
-            
-            // 優先度
-            _buildSection(
-              '優先度',
-              GestureDetector(
-                onTap: _showPriorityPicker,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.systemGrey6,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: _getPriorityColor(_priority),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(_priority.displayName),
-                        ],
-                      ),
+                        ),
                       const Icon(
-                        CupertinoIcons.chevron_right,
-                        color: CupertinoColors.systemGrey,
+                        CupertinoIcons.calendar,
+                        color: CupertinoColors.systemGrey2,
                         size: 16,
                       ),
                     ],
                   ),
                 ),
-              ),
-            ),
-            
-            const SizedBox(height: 20),
-            
-            // ステータス
-            _buildSection(
-              'ステータス',
-              GestureDetector(
-                onTap: _showStatusPicker,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.systemGrey6,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                const SizedBox(height: 16),
+                CardSelectField(
+                  label: '優先度',
+                  value: _priority.displayName,
+                  onTap: _showPriorityPicker,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_status.displayName),
-                      const Icon(
-                        CupertinoIcons.chevron_right,
-                        color: CupertinoColors.systemGrey,
-                        size: 16,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 20),
-            
-            // 繰り返し
-            _buildSection(
-              '繰り返し',
-              GestureDetector(
-                onTap: _showRepeatPicker,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.systemGrey6,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(_repeat.displayName),
-                      const Icon(
-                        CupertinoIcons.chevron_right,
-                        color: CupertinoColors.systemGrey,
-                        size: 16,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 20),
-            
-            // 関連学習テーマ
-            _buildSection(
-              '関連学習テーマ',
-              GestureDetector(
-                onTap: _showThemePicker,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.systemGrey6,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _relatedThemeId != null
-                              ? _themeService.getThemeById(_relatedThemeId!)?.title ?? 'テーマが見つかりません'
-                              : 'なし',
-                          overflow: TextOverflow.ellipsis,
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: _getPriorityColor(_priority),
+                          shape: BoxShape.circle,
                         ),
                       ),
+                      const SizedBox(width: 8),
                       const Icon(
                         CupertinoIcons.chevron_right,
-                        color: CupertinoColors.systemGrey,
+                        color: CupertinoColors.systemGrey2,
                         size: 16,
                       ),
                     ],
                   ),
                 ),
-              ),
+                const SizedBox(height: 16),
+                CardSelectField(
+                  label: 'ステータス',
+                  value: _status.displayName,
+                  onTap: _showStatusPicker,
+                ),
+                const SizedBox(height: 16),
+                CardSelectField(
+                  label: '繰り返し',
+                  value: _repeat.displayName,
+                  onTap: _showRepeatPicker,
+                ),
+              ],
             ),
             
-            const SizedBox(height: 20),
-            
-            // タグ
-            _buildSection(
-              'タグ',
-              Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: CupertinoTextFormFieldRow(
-                          controller: _tagController,
-                          placeholder: 'タグを追加',
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-                          onFieldSubmitted: (_) => _addTag(),
-                        ),
-                      ),
-                      CupertinoButton(
-                        onPressed: _addTag,
-                        child: const Icon(CupertinoIcons.add),
-                      ),
-                    ],
+            // 関連情報
+            CardSection(
+              children: [
+                const Text(
+                  '関連情報',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.label,
                   ),
-                  if (_tags.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: _tags.map((tag) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
+                ),
+                const SizedBox(height: 16),
+                CardSelectField(
+                  label: 'カテゴリー',
+                  value: _categoryId != null
+                      ? _categoryService.getCategoryById(_categoryId!)?.name ?? 'カテゴリーが見つかりません'
+                      : '未分類',
+                  onTap: _showCategoryPicker,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_categoryId != null) ...[
+                        Container(
+                          width: 12,
+                          height: 12,
                           decoration: BoxDecoration(
-                            color: CupertinoColors.systemBlue.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: CupertinoColors.systemBlue.withValues(alpha: 0.3),
+                            color: _categoryService.getCategoryById(_categoryId!)?.color ?? CupertinoColors.systemGrey,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      const Icon(
+                        CupertinoIcons.chevron_right,
+                        color: CupertinoColors.systemGrey2,
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                CardSelectField(
+                  label: '関連学習テーマ',
+                  value: _relatedThemeId != null
+                      ? _themeService.getThemeById(_relatedThemeId!)?.title ?? 'テーマが見つかりません'
+                      : 'なし',
+                  onTap: _showThemePicker,
+                ),
+                const SizedBox(height: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'タグ',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.label,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.systemBackground,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: CupertinoColors.systemGrey4,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: CupertinoTextField(
+                              controller: _tagController,
+                              placeholder: 'タグを追加',
+                              padding: const EdgeInsets.all(16),
+                              decoration: const BoxDecoration(),
+                              onSubmitted: (_) => _addTag(),
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                tag,
-                                style: const TextStyle(
-                                  color: CupertinoColors.systemBlue,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              GestureDetector(
-                                onTap: () => _removeTag(tag),
-                                child: const Icon(
-                                  CupertinoIcons.xmark,
-                                  size: 14,
-                                  color: CupertinoColors.systemBlue,
-                                ),
-                              ),
-                            ],
+                          CupertinoButton(
+                            onPressed: _addTag,
+                            child: const Icon(CupertinoIcons.add),
                           ),
-                        );
-                      }).toList(),
+                        ],
+                      ),
                     ),
+                    if (_tags.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _tags.map((tag) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: CupertinoColors.systemBlue.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: CupertinoColors.systemBlue.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  tag,
+                                  style: const TextStyle(
+                                    color: CupertinoColors.systemBlue,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: () => _removeTag(tag),
+                                  child: const Icon(
+                                    CupertinoIcons.xmark,
+                                    size: 14,
+                                    color: CupertinoColors.systemBlue,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                   ],
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildSection(String title, Widget content) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: CupertinoColors.label,
-          ),
-        ),
-        const SizedBox(height: 8),
-        content,
-      ],
     );
   }
 } 

@@ -44,38 +44,46 @@ class _StudyThemeDetailScreenState extends State<StudyThemeDetailScreen> {
     });
   }
 
-  void _navigateToEdit() async {
-    final result = await Navigator.of(context).push<StudyTheme>(
-      CupertinoPageRoute(
-        builder: (context) => StudyThemeEditScreen(theme: _theme),
+  void _navigateToEdit() {
+    showCupertinoModalPopup<StudyTheme>(
+      context: context,
+      builder: (context) => SizedBox(
+        height: MediaQuery.of(context).size.height * 0.9,
+        child: CupertinoPageScaffold(
+          child: StudyThemeEditScreen(theme: _theme),
+        ),
       ),
-    );
-
-    if (result != null) {
-      _themeService.updateTheme(result);
-      setState(() {
-        _theme = result;
-      });
-    }
+    ).then((result) {
+      if (result != null) {
+        _themeService.updateTheme(result);
+        setState(() {
+          _theme = result;
+        });
+      }
+    });
   }
 
-  void _navigateToTaskEdit({Task? task}) async {
-    final result = await Navigator.of(context).push<Task>(
-      CupertinoPageRoute(
-        builder: (context) => TaskEditScreen(task: task),
+  void _navigateToTaskEdit({Task? task}) {
+    showCupertinoModalPopup<Task>(
+      context: context,
+      builder: (context) => SizedBox(
+        height: MediaQuery.of(context).size.height * 0.9,
+        child: CupertinoPageScaffold(
+          child: TaskEditScreen(task: task),
+        ),
       ),
-    );
-
-    if (result != null) {
-      if (task == null) {
-        // 新規タスクの場合、このテーマに関連付け
-        final updatedTask = result.copyWith(relatedThemeId: _theme.id);
-        _taskService.addTask(updatedTask);
-      } else {
-        _taskService.updateTask(result);
+    ).then((result) {
+      if (result != null) {
+        if (task == null) {
+          // 新規タスクの場合、このテーマに関連付け
+          final updatedTask = result.copyWith(relatedThemeId: _theme.id);
+          _taskService.addTask(updatedTask);
+        } else {
+          _taskService.updateTask(result);
+        }
+        _loadRelatedTasks();
       }
-      _loadRelatedTasks();
-    }
+    });
   }
 
   void _updateThemeStatus(StudyThemeStatus newStatus) {
